@@ -1,26 +1,3 @@
-/*
- * MIT License
- *
- * Copyright (c) 2018 Lewis Van Winkle
- *
- * Permission is hereby granted, free of charge, to any person obtaining a copy
- * of this software and associated documentation files (the "Software"), to deal
- * in the Software without restriction, including without limitation the rights
- * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
- * copies of the Software, and to permit persons to whom the Software is
- * furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice shall be included in all
- * copies or substantial portions of the Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
- * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
- */
 
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -31,11 +8,36 @@
 #include <errno.h>
 #include <stdio.h>
 #include <string.h>
+#include<time.h>
+#include<sys/time.h>
 
 #define ISVALIDSOCKET(s) ((s) >= 0)
 #define CLOSESOCKET(s) close(s)
 #define SOCKET int
 #define GETSOCKETERRNO() (errno)
+
+void printTimestamp() {
+    time_t rawtime;
+    struct tm* timeinfo;
+    char timestamp[80];
+
+    time(&rawtime);
+    timeinfo = localtime(&rawtime);
+    strftime(timestamp, sizeof(timestamp), "%Y-%m-%d %H:%M:%S", timeinfo);
+
+    printf("\033[0;31m[%s] \033[0m", timestamp);
+}
+
+void printTimeDifference(const struct timeval* start, const struct timeval* end) {
+    long seconds = end->tv_sec - start->tv_sec;
+    long microseconds = end->tv_usec - start->tv_usec;
+    long milliseconds = seconds * 1000 + microseconds / 1000;
+    long microseconds_remainder = microseconds % 1000;
+
+    printf("Time Difference: %ld.%09ld milliseconds\n", milliseconds, microseconds_remainder);
+}
+
+
 
 int main(int argc, char *argv[]) {
 
@@ -83,6 +85,8 @@ int main(int argc, char *argv[]) {
         return 1;
     }
     freeaddrinfo(peer_address);
+    struct timeval start_time;
+    struct timeval end_time;
 
     printf("채팅 서버에 연결되었습니다.\n");
     //printf("To send data, enter text followed by enter.\n");
@@ -102,22 +106,32 @@ int main(int argc, char *argv[]) {
             fprintf(stderr, "select() failed. (%d)\n", GETSOCKETERRNO());
             return 1;
         }
-
+        //받은 메시지 출력
         if (FD_ISSET(socket_peer, &reads)) {
             char read[4096];
+            memset(read, 0, 4096);
+            gettimeofday(&start_time, NULL);
             int bytes_received = recv(socket_peer, read, 4096, 0);
+            gettimeofday(&end_time, NULL);
+            
             if (bytes_received < 1) {
                 printf("Connection closed by peer.\n");
                 break;
             }
+            printTimestamp();
             printf("%s", read);
+            printTimeDifference(&start_time, &end_time);
         }
-
+        //입력으로 들어온 메시지가 없으면 break, 있으면 서버에 보내기
         if(FD_ISSET(0, &reads)) {
             char read[4096];
+            memset(read, 0, 4096);
             if (!fgets(read, 4096, stdin)) break;
-            //printf("Sending: %s", read);
+            printTimestamp();
+            gettimeofday(&start_time, NULL);
             int bytes_sent = send(socket_peer, read, strlen(read), 0);
+            gettimeofday(&end_time, NULL);
+            printTimeDifference(&start_time, &end_time);
         }
     } //end while(1)
 
